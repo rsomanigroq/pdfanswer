@@ -1,6 +1,6 @@
 # PDF Question Answering with Groq
 
-A simple Streamlit application that uses Groq's LLM API to answer questions based on PDF files. Upload any PDF document and ask questions about its content using powerful language models.
+A simple Streamlit application that uses Groq's LLM API to answer questions based on PDF files. Upload any PDF document and ask questions about its content using powerful language models with **advanced hallucination prevention**.
 
 ## Features
 
@@ -9,6 +9,24 @@ A simple Streamlit application that uses Groq's LLM API to answer questions base
 - 🎯 **Multiple Models**: Choose from different Groq models (Llama, Mixtral, Gemma)
 - 💬 **Chat History**: Keep track of your questions and answers
 - 🎨 **Modern UI**: Clean and intuitive Streamlit interface
+- 🛡️ **Hallucination Prevention**: Advanced features to detect and prevent AI hallucinations
+
+## 🛡️ Hallucination Prevention Features
+
+### Confidence Scoring
+- **Self-Assessment**: LLM rates its own confidence in answers (HIGH/MEDIUM/LOW)
+- **Reasoning**: Provides explanation for confidence level
+- **Visual Indicators**: Color-coded confidence levels in the UI
+
+### Source Citations
+- **Exact Quotes**: Shows specific text that supports the answer
+- **Verification**: Users can verify answers against source material
+- **Transparency**: Clear indication when information is not found
+
+### Smart Detection
+- **Low Confidence Warnings**: Alerts when LLM is uncertain
+- **Missing Information**: Properly handles questions about non-existent content
+- **Consistent Responses**: Multiple verification approaches
 
 ## Supported Models
 
@@ -66,9 +84,16 @@ The app will open in your browser at `http://localhost:8501`
 ### How to Use
 1. **Upload PDF**: Click "Browse files" and select a PDF document
 2. **Wait for Processing**: The app will extract text from your PDF
-3. **Ask Questions**: Type your question in the text area
-4. **Get Answers**: Click "Ask Groq" to get AI-powered answers
-5. **Review History**: Check your previous questions and answers
+3. **Configure Settings**: Choose hallucination prevention options in the sidebar
+4. **Ask Questions**: Type your question in the text area
+5. **Review Results**: Get AI-powered answers with confidence scores and source citations
+6. **Check History**: Review previous questions and answers with confidence levels
+
+### Hallucination Prevention Settings
+
+In the sidebar, you can enable/disable:
+- ✅ **Show confidence scores**: LLM rates its own confidence
+- ✅ **Show source citations**: Display exact supporting text
 
 ## Example Questions
 
@@ -78,15 +103,28 @@ The app will open in your browser at `http://localhost:8501`
 - "List all the important dates mentioned"
 - "What methodology was used in this research?"
 
+## Testing Hallucination Prevention
+
+Run the test script to verify all features work correctly:
+```bash
+python test_hallucination_prevention.py
+```
+
+This will test:
+- Confidence scoring functionality
+- Source citation accuracy
+- Hallucination detection with non-existent information
+
 ## Project Structure
 
 ```
 pdf_infosec/
-├── app.py              # Main Streamlit application
-├── requirements.txt    # Python dependencies
-├── env_example.txt     # Environment variables template
-├── README.md          # This file
-└── venv/              # Virtual environment
+├── app.py                           # Main Streamlit application with hallucination prevention
+├── test_hallucination_prevention.py # Test script for hallucination features
+├── requirements.txt                 # Python dependencies
+├── env_example.txt                  # Environment variables template
+├── README.md                       # This file
+└── venv/                           # Virtual environment
 ```
 
 ## Dependencies
@@ -104,6 +142,7 @@ pdf_infosec/
 1. **API Key Error**: Make sure your `GROQ_API_KEY` is set correctly
 2. **PDF Reading Error**: Ensure the PDF is not corrupted or password-protected
 3. **Import Errors**: Make sure all dependencies are installed in your virtual environment
+4. **Low Confidence**: This is expected for questions about non-existent information
 
 ### Getting Help
 

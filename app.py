@@ -58,6 +58,127 @@ def ask_groq_question(context, question, model="llama3-8b-8192"):
     except Exception as e:
         return f"Error: {str(e)}"
 
+def ask_groq_with_confidence(context, question, model="llama3-8b-8192"):
+    """Ask question and get confidence score"""
+    try:
+        prompt = f"""Answer the question based on the provided content and rate your confidence.
+
+PDF Content:
+{context}
+
+Question: {question}
+
+Provide your answer in this exact format:
+ANSWER: [your answer here]
+CONFIDENCE: [HIGH/MEDIUM/LOW]
+REASONING: [brief explanation of why you're confident or not]
+
+Rules:
+- HIGH: Information is clearly stated in the text
+- MEDIUM: Information is implied or partially stated
+- LOW: Information is not found or very unclear
+- If no relevant information exists, say "I cannot find information about this in the provided document." """
+
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            temperature=0.0,
+            max_tokens=1024,
+        )
+        
+        response = chat_completion.choices[0].message.content
+        
+        # Parse the response
+        lines = response.split('\n')
+        answer = ""
+        confidence = "UNKNOWN"
+        reasoning = ""
+        
+        for line in lines:
+            if line.startswith("ANSWER:"):
+                answer = line.replace("ANSWER:", "").strip()
+            elif line.startswith("CONFIDENCE:"):
+                confidence = line.replace("CONFIDENCE:", "").strip()
+            elif line.startswith("REASONING:"):
+                reasoning = line.replace("REASONING:", "").strip()
+        
+        return {
+            "answer": answer,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "full_response": response
+        }
+    except Exception as e:
+        return {
+            "answer": f"Error: {str(e)}",
+            "confidence": "ERROR",
+            "reasoning": "Failed to process request",
+            "full_response": ""
+        }
+
+def ask_groq_with_sources(context, question, model="llama3-8b-8192"):
+    """Ask question and provide source citations"""
+    try:
+        prompt = f"""Answer the question based on the provided content and cite specific parts of the text.
+
+PDF Content:
+{context}
+
+Question: {question}
+
+Provide your answer in this format:
+ANSWER: [your answer here]
+SOURCES: [quote the specific text that supports your answer]
+CONFIDENCE: [HIGH/MEDIUM/LOW based on how clearly the information is stated]
+
+If the information is not in the text, respond with:
+ANSWER: I cannot find information about this in the provided document.
+SOURCES: None
+CONFIDENCE: NONE"""
+
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            temperature=0.0,
+            max_tokens=1024,
+        )
+        
+        response = chat_completion.choices[0].message.content
+        
+        # Parse the response
+        lines = response.split('\n')
+        answer = ""
+        sources = ""
+        confidence = "UNKNOWN"
+        
+        current_section = ""
+        for line in lines:
+            if line.startswith("ANSWER:"):
+                answer = line.replace("ANSWER:", "").strip()
+                current_section = "answer"
+            elif line.startswith("SOURCES:"):
+                sources = line.replace("SOURCES:", "").strip()
+                current_section = "sources"
+            elif line.startswith("CONFIDENCE:"):
+                confidence = line.replace("CONFIDENCE:", "").strip()
+                current_section = "confidence"
+            elif line.strip() and current_section == "sources":
+                sources += " " + line.strip()
+        
+        return {
+            "answer": answer,
+            "sources": sources,
+            "confidence": confidence,
+            "full_response": response
+        }
+    except Exception as e:
+        return {
+            "answer": f"Error: {str(e)}",
+            "sources": "Error occurred",
+            "confidence": "ERROR",
+            "full_response": ""
+        }
+
 def main():
     st.set_page_config(
         page_title="PDF Question Answering with Groq",
@@ -66,7 +187,7 @@ def main():
     )
     
     st.title("📚 PDF Question Answering with Groq")
-    st.markdown("Upload a PDF file and ask questions about its content using Groq's LLM.")
+    st.markdown("Upload a PDF file and ask questions about its content using Groq's LLM with **hallucination prevention**.")
     
     # Sidebar for configuration
     with st.sidebar:
@@ -78,12 +199,25 @@ def main():
         )
         
         st.markdown("---")
+        st.markdown("### 🛡️ Hallucination Prevention")
+        use_confidence = st.checkbox("Show confidence scores", value=True, help="LLM rates its own confidence in the answer")
+        use_sources = st.checkbox("Show source citations", value=True, help="Show exact text that supports the answer")
+        
+        if use_confidence:
+            st.info("""
+            **What does the confidence score mean?**
+            - **HIGH**: The answer is clearly stated in the document.
+            - **MEDIUM**: The answer is implied or partially stated.
+            - **LOW**: The answer is not found or is very unclear.
+            """)
+        
+        st.markdown("---")
         st.markdown("### Instructions")
         st.markdown("""
         1. Upload a PDF file
         2. Wait for text extraction
         3. Ask questions about the content
-        4. Get AI-powered answers
+        4. Get AI-powered answers with confidence scores
         """)
         
         st.markdown("---")
@@ -138,24 +272,124 @@ def main():
             if st.button("🚀 Ask Groq", type="primary"):
                 if question.strip():
                     with st.spinner("🤔 Thinking..."):
-                        answer = ask_groq_question(
-                            st.session_state['pdf_text'],
-                            question,
-                            model
-                        )
-                    
-                    st.markdown("### 💡 Answer")
-                    st.write(answer)
+                        if use_confidence and use_sources:
+                            # Use both confidence and sources
+                            result = ask_groq_with_sources(
+                                st.session_state['pdf_text'],
+                                question,
+                                model
+                            )
+                            
+                            st.markdown("### 💡 Answer")
+                            st.write(result["answer"])
+                            
+                            # Color-code confidence
+                            if result["confidence"] == "HIGH":
+                                st.success(f"✅ **Confidence:** {result['confidence']}")
+                            elif result["confidence"] == "MEDIUM":
+                                st.warning(f"⚠️ **Confidence:** {result['confidence']}")
+                            elif result["confidence"] == "LOW":
+                                st.error(f"❌ **Confidence:** {result['confidence']}")
+                            else:
+                                st.info(f"ℹ️ **Confidence:** {result['confidence']}")
+                            
+                            # Show sources
+                            if result["sources"] and result["sources"].lower() != "none":
+                                with st.expander("📚 Source Citations"):
+                                    st.markdown(result["sources"])
+                            else:
+                                st.info("📚 **Sources:** No specific citations available")
+                        
+                        elif use_confidence:
+                            # Use confidence scoring only
+                            result = ask_groq_with_confidence(
+                                st.session_state['pdf_text'],
+                                question,
+                                model
+                            )
+                            
+                            st.markdown("### 💡 Answer")
+                            st.write(result["answer"])
+                            
+                            # Color-code confidence
+                            if result["confidence"] == "HIGH":
+                                st.success(f"✅ **Confidence:** {result['confidence']}")
+                            elif result["confidence"] == "MEDIUM":
+                                st.warning(f"⚠️ **Confidence:** {result['confidence']}")
+                            elif result["confidence"] == "LOW":
+                                st.error(f"❌ **Confidence:** {result['confidence']}")
+                            else:
+                                st.info(f"ℹ️ **Confidence:** {result['confidence']}")
+                            
+                            st.markdown(f"**Reasoning:** {result['reasoning']}")
+                        
+                        elif use_sources:
+                            # Use source citations only
+                            result = ask_groq_with_sources(
+                                st.session_state['pdf_text'],
+                                question,
+                                model
+                            )
+                            
+                            st.markdown("### 💡 Answer")
+                            st.write(result["answer"])
+                            
+                            # Show sources
+                            if result["sources"] and result["sources"].lower() != "none":
+                                with st.expander("📚 Source Citations"):
+                                    st.markdown(result["sources"])
+                            else:
+                                st.info("📚 **Sources:** No specific citations available")
+                        
+                        else:
+                            # Use basic approach
+                            answer = ask_groq_question(
+                                st.session_state['pdf_text'],
+                                question,
+                                model
+                            )
+                            st.markdown("### 💡 Answer")
+                            st.write(answer)
                     
                     # Store in chat history
                     if 'chat_history' not in st.session_state:
                         st.session_state['chat_history'] = []
                     
-                    st.session_state['chat_history'].append({
-                        'question': question,
-                        'answer': answer,
-                        'model': model
-                    })
+                    # Store appropriate data based on what was used
+                    if use_confidence and use_sources:
+                        st.session_state['chat_history'].append({
+                            'question': question,
+                            'answer': result["answer"],
+                            'confidence': result["confidence"],
+                            'sources': result["sources"],
+                            'model': model,
+                            'type': 'confidence_and_sources'
+                        })
+                    elif use_confidence:
+                        st.session_state['chat_history'].append({
+                            'question': question,
+                            'answer': result["answer"],
+                            'confidence': result["confidence"],
+                            'reasoning': result["reasoning"],
+                            'model': model,
+                            'type': 'confidence'
+                        })
+                    elif use_sources:
+                        st.session_state['chat_history'].append({
+                            'question': question,
+                            'answer': result["answer"],
+                            'sources': result["sources"],
+                            'confidence': result["confidence"],
+                            'model': model,
+                            'type': 'sources'
+                        })
+                    else:
+                        st.session_state['chat_history'].append({
+                            'question': question,
+                            'answer': answer,
+                            'model': model,
+                            'type': 'basic'
+                        })
                 else:
                     st.warning("Please enter a question")
             
@@ -168,6 +402,36 @@ def main():
                     with st.expander(f"Q: {chat['question'][:50]}..."):
                         st.markdown(f"**Question:** {chat['question']}")
                         st.markdown(f"**Answer:** {chat['answer']}")
+                        
+                        # Show additional info based on type
+                        if chat.get('type') == 'confidence_and_sources':
+                            if chat['confidence'] == "HIGH":
+                                st.success(f"✅ **Confidence:** {chat['confidence']}")
+                            elif chat['confidence'] == "MEDIUM":
+                                st.warning(f"⚠️ **Confidence:** {chat['confidence']}")
+                            elif chat['confidence'] == "LOW":
+                                st.error(f"❌ **Confidence:** {chat['confidence']}")
+                            
+                            if chat['sources'] and chat['sources'].lower() != "none":
+                                st.markdown("---")
+                                st.markdown("**📚 Sources:**")
+                                st.markdown(chat['sources'])
+                        
+                        elif chat.get('type') == 'confidence':
+                            if chat['confidence'] == "HIGH":
+                                st.success(f"✅ **Confidence:** {chat['confidence']}")
+                            elif chat['confidence'] == "MEDIUM":
+                                st.warning(f"⚠️ **Confidence:** {chat['confidence']}")
+                            elif chat['confidence'] == "LOW":
+                                st.error(f"❌ **Confidence:** {chat['confidence']}")
+                            st.markdown(f"**Reasoning:** {chat['reasoning']}")
+                        
+                        elif chat.get('type') == 'sources':
+                            if chat['sources'] and chat['sources'].lower() != "none":
+                                st.markdown("---")
+                                st.markdown("**📚 Sources:**")
+                                st.markdown(chat['sources'])
+                        
                         st.caption(f"Model: {chat['model']}")
                         
                         if st.button(f"🗑️ Delete", key=f"delete_{i}"):
